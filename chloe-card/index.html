@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chloe · GrowGPT 顧問電子名片</title>
+    <meta
+      name="description"
+      content="GrowGPT 顧問 Chloe 的電子名片 — AI 社群排程與成長諮詢（Threads / Facebook / Instagram）。"
+    />
+    <meta property="og:title" content="Chloe · GrowGPT 顧問" />
+    <meta
+      property="og:description"
+      content="AI 社群成長顧問｜幫你用 GrowGPT 經營 Threads、FB、IG"
+    />
+    <meta property="og:type" content="profile" />
+    <meta property="og:site_name" content="GrowGPT" />
+    <link rel="icon" href="./assets/growgpt-mark.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="orb orb-a" aria-hidden="true"></div>
+    <div class="orb orb-b" aria-hidden="true"></div>
+
+    <main class="page">
+      <article class="card" aria-label="Chloe 電子名片">
+        <a class="brand" href="https://www.growgpt.co" target="_blank" rel="noopener noreferrer">
+          <img class="mark" src="./assets/growgpt-mark.png" alt="" width="48" height="48" />
+          <img
+            class="wordmark"
+            src="./assets/growgpt-wordmark.png"
+            alt="GrowGPT"
+            width="220"
+            height="42"
+          />
+        </a>
+
+        <div class="identity">
+          <div class="avatar" aria-hidden="true">C</div>
+          <h1>Chloe</h1>
+          <p class="role">顧問 · Consultant</p>
+          <p class="tagline">
+            幫品牌與創作者用 AI 自動化經營 Threads、Facebook、Instagram。
+          </p>
+        </div>
+
+        <div class="actions">
+          <a class="btn btn-primary" href="./chloe.vcf" download="Chloe-GrowGPT.vcf">
+            儲存聯絡人
+          </a>
+          <div class="action-row">
+            <a
+              class="btn btn-secondary"
+              href="mailto:info@growgpt.co?subject=想與顧問%20Chloe%20聯繫&body=你好%20Chloe，我想了解 GrowGPT 顧問服務。"
+            >
+              寫信聯繫
+            </a>
+            <a
+              class="btn btn-secondary"
+              href="https://www.growgpt.co/zh-TW/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              官網
+            </a>
+          </div>
+          <div class="action-row">
+            <button class="btn btn-ghost" type="button" id="share-card">分享</button>
+            <button class="btn btn-ghost" type="button" id="copy-link">複製連結</button>
+          </div>
+        </div>
+
+        <div class="meta">
+          <a href="mailto:info@growgpt.co">info@growgpt.co</a>
+          <a href="https://www.growgpt.co" target="_blank" rel="noopener noreferrer"
+            >www.growgpt.co</a
+          >
+        </div>
+
+        <div class="qr-wrap" aria-label="掃描開啟此名片">
+          <div id="qr"></div>
+        </div>
+        <p class="footer-note">掃描 QR 開啟此名片</p>
+      </article>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="./card.js"></script>
+  </body>
+</html>
