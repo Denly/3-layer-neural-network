@@ -38,7 +38,7 @@ function proj(p){
   const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
   let y2=y*cp-z*sp,z2=y*sp+z*cp;
   const d=cam.dist+z2,f=cam.f/d;
-  return{x:W/2+x*f+cam.ox,y:H*0.46-y2*f,s:f,z:d};
+  return{x:W/2+x*f+cam.ox,y:H*0.42-y2*f,s:f,z:d};
 }
 function glow(x,y,r,col,a){
   const gr=g.createRadialGradient(x,y,0,x,y,r);
@@ -52,7 +52,7 @@ function text(s,x,y,size,col='#fff',a=1,weight=900){
 function caption(lines,t0,t1,t,col){
   const a=Math.min(seg(t,t0,t0+.35),1-seg(t,t1-.3,t1));if(a<=0)return;
   const pop=1+0.12*(1-ease(seg(t,t0,t0+.4)));
-  g.save();g.translate(W/2,250);g.scale(pop,pop);
+  g.save();g.translate(W/2,360);g.scale(pop,pop);
   lines.forEach((l,i)=>text(l,0,i*120,i==0?112:92,i==0?'#fff':col,a));
   g.restore();
 }
@@ -122,8 +122,8 @@ function render(frame){
   [['INPUT',0],['HIDDEN',1],['OUTPUT',2]].forEach(([s,l])=>{
     const p=proj({x:LX[l],y:-2.1,z:0});text(s,p.x,p.y,40,'#9aa4ff',.85,800)});
   // loss chart (3D-ish panel at bottom)
-  const px=90,py=1380,pw=900,ph2=330;
-  const pa=seg(t,13,14);
+  const px=90,py=1215,pw=900,ph2=260;
+  const pa=seg(t,13,14)*(1-seg(t,23,23.4));
   if(pa>0){
     g.globalAlpha=pa;g.fillStyle='rgba(10,10,40,.7)';g.strokeStyle='rgba(120,100,255,.8)';g.lineWidth=3;
     g.beginPath();g.roundRect(px,py,pw,ph2,28);g.fill();g.stroke();
@@ -131,7 +131,7 @@ function render(frame){
     const upto=t<17?0:Math.floor(trainP*6000);
     g.strokeStyle='#ff4d8d';g.lineWidth=7;g.beginPath();
     const cutoff=t<17?1:Math.max(2,upto);
-    for(let k=0;k<=Math.min(cutoff,6000);k+=20){const x=px+40+(pw-80)*k/6000,y=py+ph2-40-(ph2-130)*Math.min(1,losses[k]/0.3);k?g.lineTo(x,y):g.moveTo(x,y)}
+    for(let k=0;k<=Math.min(cutoff,6000);k+=20){const x=px+40+(pw-80)*k/6000,y=py+ph2-40-(ph2-120)*Math.min(1,losses[k]/0.3);k?g.lineTo(x,y):g.moveTo(x,y)}
     g.stroke();
     const L=t<17?losses[0]:losses[Math.min(upto,6000)];
     text('error: '+L.toFixed(4),px+pw/2,py+ph2-10,36,'#fff');
@@ -142,8 +142,8 @@ function render(frame){
     const a=seg(t,23,23.6);const i=Math.floor((t-23)*1.2)%8;
     const out=act.o[0];
     g.globalAlpha=a;
-    text(`input ${X[i].join('')}  →  ${out>0.5?1:0}`,W/2,1230,86,'#6bffb0');
-    text(`(correct answer: ${Y[i][0]})`,W/2,1305,58,'#fff');
+    text(`input ${X[i].join('')}  →  ${out>0.5?1:0}`,W/2,1290,84,'#6bffb0');
+    text(`(correct answer: ${Y[i][0]})`,W/2,1370,56,'#fff');
     g.globalAlpha=1;
   }
   // captions
@@ -154,8 +154,8 @@ function render(frame){
   caption(['4. TWEAK THE WEIGHTS','REPEAT 6000 TIMES'],17,23,t,'#c9a0ff');
   caption(['NOW IT\'S SMART ✅','Follow for more AI'],23,27.1,t,'#6bffb0');
   // progress bar
-  g.fillStyle='rgba(255,255,255,.15)';g.fillRect(60,1850,960,12);
-  g.fillStyle='#8a6bff';g.fillRect(60,1850,960*t/DUR,12);
+  g.fillStyle='rgba(255,255,255,.15)';g.fillRect(90,1500,900,12);
+  g.fillStyle='#8a6bff';g.fillRect(90,1500,900*t/DUR,12);
 }
 window.render=render;window.FPS=FPS;window.DUR=DUR;
 </script></body></html>
