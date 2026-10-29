@@ -1,0 +1,13 @@
+[
+  {"id":"hook",   "text":"What happens if you fall into a black hole?"},
+  {"id":"disk",   "text":"At first, it's beautiful. Gas swirls around it at nearly the speed of light, glowing millions of degrees hot."},
+  {"id":"lens",   "text":"Its gravity is so strong, it bends light. You can see the back of the disk, wrapped over the top."},
+  {"id":"fall",   "text":"Now you start to fall."},
+  {"id":"tidal",  "text":"Your feet are pulled harder than your head."},
+  {"id":"spag",   "text":"Scientists call this spaghettification."},
+  {"id":"small",  "text":"Near a small black hole, you'd be stretched like a noodle."},
+  {"id":"big",    "text":"But near a giant one, you could cross the edge and feel nothing at all."},
+  {"id":"freeze", "text":"To a friend watching from far away, you'd slow down, turn red, and freeze at the edge."},
+  {"id":"noway",  "text":"But for you, there's no way back. Not even light can escape."},
+  {"id":"cta",    "text":"Follow for more what-ifs."}
+]

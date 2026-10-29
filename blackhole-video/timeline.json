@@ -1,0 +1,71 @@
+{
+ "duration": 37.793,
+ "lines": [
+  {
+   "id": "hook",
+   "text": "What happens if you fall into a black hole?",
+   "start": 0.35,
+   "end": 2.358
+  },
+  {
+   "id": "disk",
+   "text": "At first, it's beautiful. Gas swirls around it at nearly the speed of light, glowing millions of degrees hot.",
+   "start": 2.638,
+   "end": 8.47
+  },
+  {
+   "id": "lens",
+   "text": "Its gravity is so strong, it bends light. You can see the back of the disk, wrapped over the top.",
+   "start": 8.75,
+   "end": 13.917
+  },
+  {
+   "id": "fall",
+   "text": "Now you start to fall.",
+   "start": 14.197,
+   "end": 15.374
+  },
+  {
+   "id": "tidal",
+   "text": "Your feet are pulled harder than your head.",
+   "start": 15.654,
+   "end": 17.336
+  },
+  {
+   "id": "spag",
+   "text": "Scientists call this spaghettification.",
+   "start": 17.616,
+   "end": 19.572
+  },
+  {
+   "id": "small",
+   "text": "Near a small black hole, you'd be stretched like a noodle.",
+   "start": 19.852,
+   "end": 22.582
+  },
+  {
+   "id": "big",
+   "text": "But near a giant one, you could cross the edge and feel nothing at all.",
+   "start": 22.862,
+   "end": 26.281
+  },
+  {
+   "id": "freeze",
+   "text": "To a friend watching from far away, you'd slow down, turn red, and freeze at the edge.",
+   "start": 26.561,
+   "end": 31.31
+  },
+  {
+   "id": "noway",
+   "text": "But for you, there's no way back. Not even light can escape.",
+   "start": 31.59,
+   "end": 34.783
+  },
+  {
+   "id": "cta",
+   "text": "Follow for more what-ifs.",
+   "start": 35.063,
+   "end": 36.313
+  }
+ ]
+}
