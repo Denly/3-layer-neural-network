@@ -1,0 +1,385 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#000">
+<canvas id="c" width="1080" height="1920"></canvas>
+<script src="land.js"></script>
+<script>
+// "What if all the ice melted?" - every frame is drawn by render(frame).
+// window.TL (timeline.json) is injected by render.js before the first frame.
+const W = 1080, H = 1920, FPS = 30;
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const lerp = (a, b, t) => a + (b - a) * t;
+const FONT = "Impact, 'Arial Black', sans-serif";
+
+// ---------- equirectangular globe texture ----------
+const TW = 2880, TH = 1440;
+const mask = (() => {
+  const c = document.createElement('canvas'); c.width = TW; c.height = TH;
+  const x = c.getContext('2d'); x.fillStyle = '#fff';
+  for (const p of LAND) {
+    x.beginPath();
+    p.forEach(([lo, la], i) => { const X = (lo + 180) / 360 * TW, Y = (90 - la) / 180 * TH; i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
+    x.closePath(); x.fill();
+  }
+  x.fillRect(0, TH * (175 / 180), TW, TH);            // close Antarctica at the pole
+  const d = x.getImageData(0, 0, TW, TH).data, m = new Uint8Array(TW * TH);
+  for (let i = 0; i < m.length; i++) m[i] = d[i * 4] > 127;
+  return m;
+})();
+let hs = 1; const hash = (a, b) => { hs = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return hs - Math.floor(hs); };
+// two textures: frozen Earth and melted Earth (ice -> bare rock, sea ice -> ocean)
+function buildTex(melted) {
+  const t = new Uint8ClampedArray(TW * TH * 3);
+  for (let j = 0; j < TH; j++) {
+    const lat = 90 - (j + .5) / TH * 180;
+    for (let i = 0; i < TW; i++) {
+      const lon = (i + .5) / TW * 360 - 180, k = j * TW + i, o = k * 3;
+      const n = hash(Math.floor(i / 6), Math.floor(j / 6)) * .5 + hash(Math.floor(i / 23), Math.floor(j / 23)) * .5;
+      let r, gg, b;
+      if (mask[k]) {
+        const greenland = lat > 59 && lon > -75 && lon < -10, antarctic = lat < -60;
+        if ((greenland || antarctic) && !melted) { r = 232 + n * 20; gg = 242 + n * 12; b = 255; }
+        else if (greenland || antarctic) { r = 92 + n * 40; gg = 84 + n * 34; b = 78 + n * 30; }
+        else {
+          const dry = clamp(1 - Math.abs(Math.abs(lat) - 24) / 14) * (0.6 + n * .6);
+          const cold = clamp((Math.abs(lat) - 55) / 20);
+          r = lerp(lerp(46, 196, dry), 150, cold) + n * 18; gg = lerp(lerp(120, 160, dry), 150, cold) + n * 14; b = lerp(lerp(52, 96, dry), 140, cold) + n * 10;
+        }
+      } else {
+        const sea = lat > 76 && !melted;
+        if (sea) { r = 205 + n * 30; gg = 225 + n * 20; b = 245; }
+        else { r = 10 + n * 10; gg = 64 + n * 18 + Math.abs(lat) * .2; b = 132 + n * 22; }
+      }
+      t[o] = r; t[o + 1] = gg; t[o + 2] = b;
+    }
+  }
+  return t;
+}
+const TEX = [buildTex(false), buildTex(true)];
+
+const gi = g.createImageData(W, H), gd = gi.data;
+// draws the globe (per pixel, lit) into the canvas. melt: 0 = frozen, 1 = melted
+function globe(cx, cy, R, lon0, lat0, melt = 0, alpha = 1) {
+  const p0 = lat0 * Math.PI / 180, sp = Math.sin(p0), cp = Math.cos(p0);
+  const L = [-.55, .45, .7], ll = Math.hypot(...L); L[0] /= ll; L[1] /= ll; L[2] /= ll;
+  const x0 = Math.max(0, Math.floor(cx - R - 40)), x1 = Math.min(W, Math.ceil(cx + R + 40));
+  const y0 = Math.max(0, Math.floor(cy - R - 40)), y1 = Math.min(H, Math.ceil(cy + R + 40));
+  const img = g.getImageData(x0, y0, x1 - x0, y1 - y0), d = img.data, bw = x1 - x0;
+  const A = TEX[0], B = TEX[1];
+  for (let py = y0; py < y1; py++) for (let px = x0; px < x1; px++) {
+    const x = (px - cx) / R, y = (cy - py) / R, r2 = x * x + y * y, o = ((py - y0) * bw + (px - x0)) * 4;
+    if (r2 > 1) {                                        // atmosphere halo
+      const h = clamp(1 - (Math.sqrt(r2) - 1) * 9) ** 2 * .75 * alpha;
+      if (h > 0) { d[o] += (90 - d[o]) * h; d[o + 1] += (170 - d[o + 1]) * h; d[o + 2] += (255 - d[o + 2]) * h; }
+      continue;
+    }
+    const z = Math.sqrt(1 - r2);
+    const lat = Math.asin(clamp(z * sp + y * cp, -1, 1));
+    let lon = lon0 * Math.PI / 180 + Math.atan2(x, z * cp - y * sp);
+    lon = ((lon / Math.PI * 180 + 540) % 360) - 180;
+    const ti = Math.min(TW - 1, ((lon + 180) / 360 * TW) | 0), tj = Math.min(TH - 1, ((90 - lat * 180 / Math.PI) / 180 * TH) | 0), q = (tj * TW + ti) * 3;
+    let r = lerp(A[q], B[q], melt), gg = lerp(A[q + 1], B[q + 1], melt), b = lerp(A[q + 2], B[q + 2], melt);
+    const nd = x * L[0] + y * L[1] + z * L[2], dif = .18 + .95 * Math.max(0, nd);
+    const water = !mask[tj * TW + ti];
+    const spec = water ? Math.pow(Math.max(0, 2 * nd * z - L[2]), 30) * 140 : 0;
+    const rim = Math.pow(1 - z, 3) * .8;
+    r = r * dif + spec + (90 - r * dif) * rim; gg = gg * dif + spec + (170 - gg * dif) * rim; b = b * dif + spec + (255 - b * dif) * rim;
+    d[o] = lerp(d[o], r, alpha); d[o + 1] = lerp(d[o + 1], gg, alpha); d[o + 2] = lerp(d[o + 2], b, alpha);
+  }
+  g.putImageData(img, x0, y0);
+}
+// screen position of lon/lat on the globe (null when on the far side)
+function globePt(cx, cy, R, lon0, lat0, lon, lat) {
+  const r = Math.PI / 180, p = lat * r, l = (lon - lon0) * r, p0 = lat0 * r;
+  const cosc = Math.sin(p0) * Math.sin(p) + Math.cos(p0) * Math.cos(p) * Math.cos(l);
+  return { x: cx + R * Math.cos(p) * Math.sin(l), y: cy - R * (Math.cos(p0) * Math.sin(p) - Math.sin(p0) * Math.cos(p) * Math.cos(l)), v: cosc };
+}
+
+// ---------- shared drawing ----------
+const stars = [...Array(260)].map((_, i) => ({ x: hash(i, 1) * W, y: hash(i, 2) * H, s: hash(i, 3) * 2.2 + .4, p: hash(i, 4) * 6 }));
+function space(t, tint = '#03040c') {
+  g.fillStyle = tint; g.fillRect(0, 0, W, H);
+  for (const s of stars) { g.globalAlpha = .35 + .35 * Math.sin(t * 2 + s.p); g.fillStyle = '#cfe3ff'; g.fillRect(s.x, s.y, s.s, s.s); }
+  g.globalAlpha = 1;
+}
+function txt(s, x, y, size, col = '#fff', a = 1, align = 'center', stroke = true) {
+  g.globalAlpha = a; g.font = `900 ${size}px ${FONT}`; g.textAlign = align; g.textBaseline = 'alphabetic';
+  const mw = g.measureText(s).width; if (mw > 940) { size *= 940 / mw; g.font = `900 ${size}px ${FONT}`; }
+  if (stroke) { g.lineJoin = 'round'; g.lineWidth = size * .18; g.strokeStyle = 'rgba(0,0,0,.9)'; g.strokeText(s, x, y); }
+  g.fillStyle = col; g.fillText(s, x, y); g.globalAlpha = 1;
+}
+function title(s, t, t0, col = '#fff', y = 330, size = 104, sub, subCol = '#7fd3ff') {
+  const a = seg(t, t0, t0 + .25), pop = 1 + .25 * (1 - easeOut(seg(t, t0, t0 + .35)));
+  g.save(); g.translate(W / 2, y); g.scale(pop, pop); txt(s, 0, 0, size, col, a);
+  if (sub) txt(sub, 0, size * .85, size * .5, subCol, a);
+  g.restore();
+}
+function glowDot(x, y, r, col, a = 1) {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(.35, `rgba(${col},${a * .4})`); gr.addColorStop(1, `rgba(${col},0)`);
+  g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+}
+function waterGrad(y0, y1, a = .82) {
+  const gr = g.createLinearGradient(0, y0, 0, y1);
+  gr.addColorStop(0, `rgba(40,150,230,${a})`); gr.addColorStop(1, `rgba(5,30,90,${Math.min(1, a + .12)})`); return gr;
+}
+function waveLine(y, t, amp = 10, x0 = 0, x1 = W) {
+  g.moveTo(x0, y);
+  for (let x = x0; x <= x1; x += 12) g.lineTo(x, y + Math.sin(x * .018 + t * 3.2) * amp + Math.sin(x * .041 - t * 2.1) * amp * .45);
+}
+
+// ---------- scenes (t = absolute seconds, a/b = this scene's start/end) ----------
+function sceneHook(t, a, b) {
+  space(t);
+  const z = easeOut(seg(t, a, a + 2.5)), R = lerp(300, 410, z);
+  const flash = TL.hook2 ? seg(t, TL.hook2.start + .55, TL.hook2.start + .7) * (1 - seg(t, TL.hook2.start + .7, TL.hook2.start + 1.3)) : 0;
+  globe(W / 2, 900, R, -40 + t * 14, 28, 0);
+  if (flash > 0) { g.fillStyle = `rgba(200,235,255,${flash * .55})`; g.fillRect(0, 0, W, H); }
+  title('WHAT IF ALL', t, a, '#fff', 300, 120);
+  title('THE ICE MELTED?', t, a + .45, '#8fe3ff', 420, 120);
+}
+function sceneAmount(t, a, b) {
+  space(t);
+  const k = ease(seg(t, a, a + 2.2));
+  const lat0 = lerp(28, -62, k), R = 420;
+  globe(W / 2, 900, R, lerp(-40 + a * 14, 20, k) + t * 6, lat0, 0);
+  const n = Math.round(30e6 * easeOut(seg(t, a + .2, a + 2.6)));
+  title(n.toLocaleString('en-US') + ' km³', t, a, '#fff', 300, 96, 'OF ICE ON EARTH', '#8fe3ff');
+  if (t > a + 3) {
+    const s = easeOut(seg(t, a + 3, a + 3.6));
+    g.strokeStyle = `rgba(255,220,90,${s})`; g.lineWidth = 8; g.setLineDash([22, 14]); g.lineDashOffset = -t * 40;
+    g.beginPath(); g.ellipse(W / 2, 1040, 260 * s, 150 * s, 0, 0, 7); g.stroke(); g.setLineDash([]);
+    txt('90% HERE', W / 2, 1290, 92 * s + 1, '#ffd84a', s);
+    txt('ANTARCTICA', W / 2, 1360, 50, '#fff', s);
+  }
+}
+function sceneGlass(t, a, b) {
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#16304f'); bg.addColorStop(1, '#060d1a');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const cx = W / 2, top = 500, bot = 1170, rt = 250, rb = 190, ry = 50;
+  const melt = ease(seg(t, a + 1, b - .6)), lvl = 830;
+  // water
+  g.save(); g.beginPath(); g.moveTo(cx - rt * .96, lvl); g.lineTo(cx - rb, bot); g.ellipse(cx, bot, rb, ry * .8, 0, Math.PI, 0, true); g.lineTo(cx + rt * .96, lvl); g.closePath();
+  g.fillStyle = waterGrad(lvl, bot, .75); g.fill(); g.restore();
+  g.fillStyle = 'rgba(120,200,255,.55)'; g.beginPath(); g.ellipse(cx, lvl, rt * .96 - (lvl - top) * .0, ry * .9, 0, 0, 7); g.fill();
+  // ice cube (isometric), shrinking, bobbing at the surface
+  const s = lerp(150, 18, melt), bob = Math.sin(t * 2.4) * 6, ix = cx + 20, iy = lvl - s * .25 + bob;
+  if (s > 20) {
+    const h = s * .5;
+    g.fillStyle = 'rgba(235,248,255,.95)'; g.beginPath(); g.moveTo(ix, iy - h - s * .35); g.lineTo(ix + s, iy - h); g.lineTo(ix, iy - h + s * .35); g.lineTo(ix - s, iy - h); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(170,215,245,.92)'; g.beginPath(); g.moveTo(ix - s, iy - h); g.lineTo(ix, iy - h + s * .35); g.lineTo(ix, iy + h + s * .35); g.lineTo(ix - s, iy + h); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(130,190,235,.92)'; g.beginPath(); g.moveTo(ix + s, iy - h); g.lineTo(ix, iy - h + s * .35); g.lineTo(ix, iy + h + s * .35); g.lineTo(ix + s, iy + h); g.closePath(); g.fill();
+  }
+  // glass
+  g.strokeStyle = 'rgba(220,240,255,.85)'; g.lineWidth = 6;
+  g.beginPath(); g.ellipse(cx, top, rt, ry, 0, 0, 7); g.stroke();
+  g.beginPath(); g.moveTo(cx - rt, top); g.lineTo(cx - rb, bot); g.moveTo(cx + rt, top); g.lineTo(cx + rb, bot); g.stroke();
+  g.beginPath(); g.ellipse(cx, bot, rb, ry * .8, 0, 0, Math.PI); g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(cx - rt + 40, top + 40, 26, bot - top - 80);
+  // level marker
+  g.setLineDash([18, 12]); g.strokeStyle = '#ffd84a'; g.lineWidth = 5; g.beginPath(); g.moveTo(cx - 400, lvl); g.lineTo(cx - rt - 10, lvl); g.moveTo(cx + rt + 10, lvl); g.lineTo(cx + 400, lvl); g.stroke(); g.setLineDash([]);
+  title('FLOATING ICE', t, a, '#fff', 300, 104);
+  if (t > a + 1.2) txt('WATER LEVEL: SAME ✓', W / 2, 1300, 70, '#ffd84a', seg(t, a + 1.2, a + 1.6));
+}
+function sceneLandIce(t, a, b) {
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#1a3a63'); bg.addColorStop(1, '#07111f');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const sea = 1150 - 40 * ease(seg(t, a + .4, b));
+  // rock
+  g.fillStyle = '#5b4b42'; g.beginPath(); g.moveTo(140, 1500); g.quadraticCurveTo(300, 760, 540, 740); g.quadraticCurveTo(780, 760, 940, 1500); g.fill();
+  g.fillStyle = '#463830'; g.beginPath(); g.moveTo(540, 740); g.quadraticCurveTo(780, 760, 940, 1500); g.lineTo(700, 1500); g.quadraticCurveTo(650, 900, 540, 740); g.fill();
+  // ice sheet on top, melting
+  const m = ease(seg(t, a + .3, b));
+  g.fillStyle = '#eef8ff'; g.beginPath(); g.moveTo(250, 980); g.quadraticCurveTo(540, lerp(560, 700, m), 830, 980); g.quadraticCurveTo(540, 900, 250, 980); g.fill();
+  // meltwater streams
+  for (let i = 0; i < 26; i++) {
+    const ph = (t * .9 + i / 26) % 1, side = i % 2 ? 1 : -1, sx = 540 + side * (160 + (i % 5) * 22);
+    const x = sx + side * ph * 180, y = 960 + ph * (sea - 960);
+    glowDot(x, y, 14, '120,200,255', .9 * (1 - ph * .3));
+  }
+  g.fillStyle = waterGrad(sea, H, .85); g.beginPath(); waveLine(sea, t, 9); g.lineTo(W, H); g.lineTo(0, H); g.fill();
+  title('LAND ICE', t, a, '#fff', 300, 120, 'THIS RAISES THE SEA', '#ff8a7a');
+  const arr = seg(t, a + .5, a + .8);
+  txt('⬆', 960, sea - 30, 110, '#ffd84a', arr, 'center', false);
+}
+// one continuous shot for green -> ant -> total: the ocean climbs a city
+function sceneOcean(t, a, b) {
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#2a1d4a'); bg.addColorStop(.5, '#e07a5f'); bg.addColorStop(.62, '#f2b880'); bg.addColorStop(1, '#1b2338');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const G = TL.green, A = TL.ant, T = TL.total;
+  // metres -> screen y (ground at 1450)
+  const scale = 12.2, y = m => 1450 - m * scale;
+  let level = 0;
+  level = lerp(level, 7, ease(seg(t, G.start + .4, G.end)));
+  level = lerp(level, 65, ease(seg(t, A.start + .3, A.end)));
+  level = lerp(level, 70, ease(seg(t, T.start, T.start + 1.2)));
+  // city: 3D boxes
+  const blds = [[90, 70, 14], [180, 90, 28], [290, 80, 9], [380, 120, 60], [520, 90, 36], [630, 70, 20], [720, 100, 46], [840, 80, 12], [930, 70, 24]];
+  for (const [x, w, hm] of blds) {
+    const top = y(hm), d = 26;
+    g.fillStyle = '#2b2f45'; g.fillRect(x, top, w, 1450 - top);
+    g.fillStyle = '#3d4363'; g.beginPath(); g.moveTo(x, top); g.lineTo(x + d, top - d); g.lineTo(x + w + d, top - d); g.lineTo(x + w, top); g.fill();
+    g.fillStyle = '#1d2033'; g.beginPath(); g.moveTo(x + w, top); g.lineTo(x + w + d, top - d); g.lineTo(x + w + d, 1450 - d); g.lineTo(x + w, 1450); g.fill();
+    g.fillStyle = 'rgba(255,214,120,.55)';
+    for (let wy = top + 14; wy < 1440; wy += 3 * scale) for (let wx = x + 10; wx < x + w - 14; wx += 22) if (hash(wx, wy) > .35) g.fillRect(wx, wy, 10, 14);
+  }
+  // the 20-story tower gets a label
+  const tw = blds[3]; txt('20 FLOORS', tw[0] + tw[1] / 2, y(60) - 46, 34, '#fff', 1);
+  g.fillStyle = '#20263a'; g.fillRect(0, 1450, W, H);
+  // water
+  const wy = y(level);
+  g.fillStyle = waterGrad(wy, 1450, .8); g.beginPath(); waveLine(wy, t, 8); g.lineTo(W, H); g.lineTo(0, H); g.fill();
+  g.strokeStyle = 'rgba(220,245,255,.8)'; g.lineWidth = 4; g.beginPath(); waveLine(wy, t, 8); g.stroke();
+  // depth ruler
+  g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(20, y(80), 70, 80 * scale);
+  for (let m = 0; m <= 80; m += 10) { g.fillStyle = '#fff'; g.fillRect(20, y(m) - 2, 26, 4); txt(m + '', 66, y(m) + 10, 26, '#fff', 1, 'center', false); }
+  g.fillStyle = '#ffd84a'; g.beginPath(); g.moveTo(96, wy); g.lineTo(122, wy - 16); g.lineTo(122, wy + 16); g.fill();
+  // headline
+  const showT = t >= T.start, showA = t >= A.start;
+  const lbl = showT ? '≈ 70 METRES' : (showA ? '+58 m ANTARCTICA' : '+7 m GREENLAND');
+  const t0 = showT ? T.start : (showA ? A.start : G.start);
+  title(lbl, t, t0, showT ? '#ffd84a' : '#fff', 300, 104, 'SEA LEVEL: +' + level.toFixed(level < 10 ? 1 : 0) + ' m', '#8fe3ff');
+}
+const CITIES = [['MIAMI', -80.19, 25.76], ['AMSTERDAM', 4.9, 52.37], ['VENICE', 12.32, 45.44], ['SHANGHAI', 121.47, 31.23]];
+function sceneCities(t, a, b) {
+  space(t);
+  const words = TL.cities.words, R = 430, cx = W / 2, cy = 930;
+  // glide the globe to each city as it is named
+  const target = CITIES.map(c => c[1]);
+  let lon = -80; for (let i = 1; i < 4; i++) lon = lerp(lon, target[i], ease(seg(t, words[i].start - .25, words[i].start + .2)));
+  const lat = 32;
+  globe(cx, cy, R, lon, lat, 1);
+  CITIES.forEach(([n, clo, cla], i) => {
+    if (t < words[i].start) return;
+    const p = globePt(cx, cy, R, lon, lat, clo, cla); if (p.v < .1) return;
+    const k = seg(t, words[i].start, words[i].start + .3);
+    for (let r = 0; r < 3; r++) { const ph = (t * 1.2 + r / 3) % 1; g.strokeStyle = `rgba(80,190,255,${(1 - ph) * k})`; g.lineWidth = 4; g.beginPath(); g.arc(p.x, p.y, 10 + ph * 70, 0, 7); g.stroke(); }
+    glowDot(p.x, p.y, 34, '255,90,90', k);
+    txt(n, p.x, p.y - 50, 46, '#fff', k * clamp(p.v * 2));
+  });
+  const gone = words[4] && t >= words[4].start;
+  title(gone ? 'UNDERWATER' : 'COASTAL CITIES', t, gone ? words[4].start : a, gone ? '#ff6b6b' : '#fff', 300, 110);
+}
+function scenePeople(t, a, b) {
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#101a33'); bg.addColorStop(1, '#04070f');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  // a perspective field of people
+  const rows = 16;
+  for (let r = rows - 1; r >= 0; r--) {
+    const depth = 1 + r * .35, yy = 760 + 640 / depth, sc = 1 / depth, cols = Math.round(10 * depth);
+    for (let c = 0; c < cols; c++) {
+      const xx = W / 2 + (c - (cols - 1) / 2) * 96 * sc;
+      const appear = seg(t, a + r * .06 + hash(c, r) * .3, a + r * .06 + hash(c, r) * .3 + .3);
+      if (appear <= 0) continue;
+      const walk = Math.max(0, t - a - 1) * 30 * sc;
+      const s = 26 * sc * easeOut(appear), px = xx, py = yy - walk * .4 + Math.abs(Math.sin(t * 6 + c + r)) * 3 * sc;
+      g.globalAlpha = .4 + .6 * sc * 2.5 > 1 ? 1 : .4 + .6 * sc * 2.5;
+      g.fillStyle = r < 4 ? '#ffd84a' : '#9fc7ff';
+      g.beginPath(); g.arc(px, py - s * 2.2, s * .55, 0, 7); g.fill();
+      g.beginPath(); g.roundRect(px - s * .6, py - s * 1.5, s * 1.2, s * 1.7, s * .4); g.fill();
+    }
+  }
+  g.globalAlpha = 1;
+  const wl = lerp(1700, 1420, ease(seg(t, a, b)));
+  g.fillStyle = waterGrad(wl, H, .9); g.beginPath(); waveLine(wl, t, 10); g.lineTo(W, H); g.lineTo(0, H); g.fill();
+  title('HUNDREDS OF MILLIONS', t, a, '#fff', 300, 92, 'WOULD NEED A NEW HOME', '#ffd84a');
+}
+function sceneHourglass(t, a, b) {
+  const bg = g.createRadialGradient(W / 2, 900, 50, W / 2, 900, 900); bg.addColorStop(0, '#2b2340'); bg.addColorStop(1, '#07060d');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const cx = W / 2, cy = 930, hw = 230, hh = 330, k = seg(t, a, b + 2.5);
+  g.save(); g.translate(cx, cy); g.rotate(Math.sin(t * .8) * .04);
+  // sand
+  g.fillStyle = '#f2c46b';
+  const topH = hh * .8 * (1 - k), botH = hh * .8 * k;
+  g.beginPath(); g.moveTo(-hw * topH / hh, -topH); g.lineTo(hw * topH / hh, -topH); g.lineTo(0, -6); g.fill();
+  g.beginPath(); g.moveTo(-hw * .92, hh - 8); g.lineTo(hw * .92, hh - 8); g.lineTo(hw * .92 * (1 - botH / hh), hh - 8 - botH); g.lineTo(-hw * .92 * (1 - botH / hh), hh - 8 - botH); g.fill();
+  g.fillRect(-3, -6, 6, hh - botH);
+  // glass
+  g.strokeStyle = 'rgba(220,235,255,.85)'; g.lineWidth = 7;
+  g.beginPath(); g.moveTo(-hw, -hh); g.lineTo(hw, -hh); g.lineTo(14, -8); g.lineTo(hw, hh); g.lineTo(-hw, hh); g.lineTo(-14, -8); g.closePath(); g.stroke();
+  g.fillStyle = '#6b4a2c'; g.fillRect(-hw - 40, -hh - 40, (hw + 40) * 2, 34); g.fillRect(-hw - 40, hh + 6, (hw + 40) * 2, 34);
+  g.restore();
+  title('THE GOOD NEWS', t, a, '#7dffb0', 300, 104, 'IT TAKES THOUSANDS OF YEARS', '#fff');
+}
+function sceneGraph(t, a, b) {
+  g.fillStyle = '#060b16'; g.fillRect(0, 0, W, H);
+  const x0 = 130, x1 = 960, y0 = 1250, y1 = 640;
+  g.strokeStyle = 'rgba(255,255,255,.25)'; g.lineWidth = 2;
+  for (let c = 0; c <= 12; c += 2) { const yy = lerp(y0, y1, c / 12); g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); txt(c + ' cm', x0 - 16, yy + 10, 28, '#9fb4d6', 1, 'right', false); }
+  ['1993', '2003', '2013', '2023'].forEach((s, i) => txt(s, lerp(x0, x1, i / 3), y0 + 50, 32, '#9fb4d6', 1, 'center', false));
+  // approximate satellite-era rise (~10 cm 1993-2023, accelerating)
+  const k = easeOut(seg(t, a + .1, b - .2)), N = 300;
+  g.strokeStyle = '#ff5d73'; g.lineWidth = 8; g.lineJoin = 'round'; g.beginPath();
+  let lx = x0, ly = y0;
+  for (let i = 0; i <= N * k; i++) {
+    const s = i / N * 30, mm = 2.1 * s + .04 * s * s + Math.sin(s * 6.28) * 1.2;
+    lx = lerp(x0, x1, i / N); ly = lerp(y0, y1, mm / 120); i ? g.lineTo(lx, ly) : g.moveTo(lx, ly);
+  }
+  g.stroke(); glowDot(lx, ly, 46, '255,93,115', 1);
+  title('THE BAD NEWS', t, a, '#ff5d73', 300, 104, 'SEAS ARE ALREADY RISING', '#fff');
+  txt('≈ +10 cm SINCE 1993', W / 2, 560, 64, '#ffd84a', seg(t, a + .8, a + 1.2));
+}
+function sceneEnd(t, a, b) {
+  space(t);
+  globe(W / 2, 900, 400, t * 20, 20, 0);
+  title('FOLLOW', t, a, '#fff', 300, 130, 'FOR MORE WHAT-IFS', '#8fe3ff');
+}
+
+// scene list: [scene fn, first line id]; a scene runs until the next scene's line starts
+const SCENES = [[sceneHook, 'hook'], [sceneAmount, 'amount'], [sceneGlass, 'twist'], [sceneLandIce, 'land'], [sceneOcean, 'green'],
+  [sceneCities, 'cities'], [scenePeople, 'people'], [sceneHourglass, 'good'], [sceneGraph, 'bad'], [sceneEnd, 'cta']];
+
+// ---------- captions: ~3-word chunks, current word highlighted ----------
+const CAP_Y = 1480, CAP_SIZE = 92;
+function captions(t) {
+  const ln = TL.lines.find(l => t >= l.start - .05 && t <= l.end + .3); if (!ln) return;
+  let ch = ln.chunks[0]; for (const c of ln.chunks) if (t >= c[0].start - .02) ch = c;
+  const pop = easeOut(seg(t, ch[0].start, ch[0].start + .14));
+  g.font = `900 ${CAP_SIZE}px ${FONT}`;
+  const ws = ch.map(w => ({ ...w, ww: g.measureText(w.w + ' ').width })), total = ws.reduce((s, w) => s + w.ww, 0) - g.measureText(' ').width;
+  const fit = Math.min(1, 940 / total);
+  g.save(); g.translate(W / 2, CAP_Y); g.scale(fit * (.85 + .15 * pop), fit * (.85 + .15 * pop));
+  let x = -total / 2;
+  for (const w of ws) {
+    const cur = t >= w.start && t < w.end + .02;
+    g.textAlign = 'left'; g.lineJoin = 'round'; g.lineWidth = 18; g.strokeStyle = '#000'; g.strokeText(w.w, x, 0);
+    g.fillStyle = cur ? '#ffe14d' : '#fff'; g.fillText(w.w, x, 0); x += w.ww;
+  }
+  g.restore();
+}
+
+function prepare(tl) {
+  window.TL = tl;
+  for (const l of tl.lines) {
+    TL[l.id] = l;
+    const ws = l.text.split(/\s+/), wts = ws.map(w => w.replace(/[^\w]/g, '').length + 2), sum = wts.reduce((a, b) => a + b, 0);
+    let s = l.start; l.words = ws.map((w, i) => { const d = (l.end - l.start) * wts[i] / sum, o = { w: w.toUpperCase(), start: s, end: s + d }; s += d; return o; });
+    // chunk: up to 3 words, break after sentence punctuation
+    l.chunks = [[]];
+    for (const w of l.words) { const c = l.chunks.at(-1); c.push(w); if (c.length >= 3 || /[.?!,]$/.test(w.w)) l.chunks.push([]); }
+    l.chunks = l.chunks.filter(c => c.length);
+  }
+  window.DUR = tl.duration;
+}
+function sceneAt(t) {
+  let i = 0; for (let k = 0; k < SCENES.length; k++) if (t >= TL[SCENES[k][1]].start - .15) i = k;
+  return i;
+}
+function render(frame) {
+  const t = frame / FPS, i = Math.max(0, sceneAt(t)), [fn, id] = SCENES[i];
+  const a = i ? TL[id].start - .15 : 0, b = i + 1 < SCENES.length ? TL[SCENES[i + 1][1]].start - .15 : DUR;
+  g.globalAlpha = 1; fn(t, a, b);
+  // whip transition: quick white-blue flash + zoom blur feel at scene start
+  const tr = 1 - seg(t, a, a + .22);
+  if (i && tr > 0) { g.fillStyle = `rgba(190,230,255,${tr * .6})`; g.fillRect(0, 0, W, H); }
+  captions(t);
+  // vignette
+  const v = g.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+}
+window.prepare = prepare; window.render = render; window.FPS = FPS;
+</script></body></html>

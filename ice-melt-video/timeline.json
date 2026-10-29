@@ -1,0 +1,83 @@
+{
+ "duration": 42.165,
+ "lines": [
+  {
+   "id": "hook",
+   "text": "What if all the ice on Earth melted?",
+   "start": 0.35,
+   "end": 1.999
+  },
+  {
+   "id": "hook2",
+   "text": "Not some of it. All of it.",
+   "start": 2.279,
+   "end": 3.475
+  },
+  {
+   "id": "amount",
+   "text": "Our planet holds over thirty million cubic kilometres of ice. About ninety percent of it sits on Antarctica.",
+   "start": 3.755,
+   "end": 9.948
+  },
+  {
+   "id": "twist",
+   "text": "But here's the twist. When floating sea ice melts, sea level barely moves. It's like ice in your drink.",
+   "start": 10.228,
+   "end": 15.84
+  },
+  {
+   "id": "land",
+   "text": "The real danger is ice sitting on land.",
+   "start": 16.12,
+   "end": 18.294
+  },
+  {
+   "id": "green",
+   "text": "Melt Greenland, and the oceans rise seven metres.",
+   "start": 18.574,
+   "end": 21.451
+  },
+  {
+   "id": "ant",
+   "text": "Melt Antarctica, and they rise almost sixty more.",
+   "start": 21.731,
+   "end": 24.608
+  },
+  {
+   "id": "total",
+   "text": "That's around seventy metres. Taller than a twenty-story building.",
+   "start": 24.888,
+   "end": 28.255
+  },
+  {
+   "id": "cities",
+   "text": "Miami. Amsterdam. Venice. Shanghai. Gone.",
+   "start": 28.535,
+   "end": 31.037
+  },
+  {
+   "id": "people",
+   "text": "Hundreds of millions of people would need a new home.",
+   "start": 31.317,
+   "end": 33.853
+  },
+  {
+   "id": "good",
+   "text": "The good news? It would take thousands of years.",
+   "start": 34.133,
+   "end": 36.526
+  },
+  {
+   "id": "bad",
+   "text": "The bad news? The seas are already rising.",
+   "start": 36.806,
+   "end": 39.154
+  },
+  {
+   "id": "cta",
+   "text": "Follow for more what-ifs.",
+   "start": 39.434,
+   "end": 40.685
+  }
+ ]
+}

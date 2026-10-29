@@ -1,0 +1,15 @@
+[
+  {"id":"hook",    "text":"What if all the ice on Earth melted?"},
+  {"id":"hook2",   "text":"Not some of it. All of it."},
+  {"id":"amount",  "text":"Our planet holds over thirty million cubic kilometres of ice. About ninety percent of it sits on Antarctica."},
+  {"id":"twist",   "text":"But here's the twist. When floating sea ice melts, sea level barely moves. It's like ice in your drink."},
+  {"id":"land",    "text":"The real danger is ice sitting on land."},
+  {"id":"green",   "text":"Melt Greenland, and the oceans rise seven metres."},
+  {"id":"ant",     "text":"Melt Antarctica, and they rise almost sixty more."},
+  {"id":"total",   "text":"That's around seventy metres. Taller than a twenty-story building."},
+  {"id":"cities",  "text":"Miami. Amsterdam. Venice. Shanghai. Gone."},
+  {"id":"people",  "text":"Hundreds of millions of people would need a new home."},
+  {"id":"good",    "text":"The good news? It would take thousands of years."},
+  {"id":"bad",     "text":"The bad news? The seas are already rising."},
+  {"id":"cta",     "text":"Follow for more what-ifs."}
+]
