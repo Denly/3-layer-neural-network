@@ -1,0 +1,161 @@
+<!doctype html><html><body style="margin:0;background:#05060d">
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W=1080,H=1920,FPS=30,DUR=27;
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+// ---------- real training (3-6-1 net, 3-bit parity) ----------
+let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
+const gauss=()=>Math.sqrt(-2*Math.log(rnd()+1e-9))*Math.cos(6.283*rnd());
+const NI=3,NH=6,NO=1;
+let W1=[...Array(NH)].map(()=>[...Array(NI)].map(()=>gauss()*0.8));
+let b1=Array(NH).fill(0);
+let W2=[...Array(NO)].map(()=>[...Array(NH)].map(()=>gauss()*0.8));
+let b2=Array(NO).fill(0);
+const X=[],Y=[];for(let i=0;i<8;i++){const a=[i>>2&1,i>>1&1,i&1];X.push(a);Y.push([(a[0]^a[1]^a[2])])}
+const sig=x=>1/(1+Math.exp(-x));
+function fwd(x){const h=W1.map((r,j)=>sig(r.reduce((s,w,i)=>s+w*x[i],b1[j])));const o=W2.map((r,k)=>sig(r.reduce((s,w,j)=>s+w*h[j],b2[k])));return{h,o}}
+const snaps=[];const losses=[];
+for(let ep=0;ep<=6000;ep++){
+  let L=0;
+  for(let n=0;n<8;n++){const{h,o}=fwd(X[n]);const e=o[0]-Y[n][0];L+=e*e/8;
+    const d2=e*o[0]*(1-o[0]);const d1=h.map((hj,j)=>W2[0][j]*d2*hj*(1-hj));
+    for(let j=0;j<NH;j++){W2[0][j]-=1.2*d2*h[j];for(let i=0;i<NI;i++)W1[j][i]-=1.2*d1[j]*X[n][i];b1[j]-=1.2*d1[j]}b2[0]-=1.2*d2}
+  losses.push(L);
+  if(ep%25==0)snaps.push({W1:W1.map(r=>r.slice()),W2:W2.map(r=>r.slice()),b1:b1.slice(),b2:b2.slice(),L,ep});
+}
+// ---------- layout ----------
+const layers=[NI,NH,NO],LX=[-3,0,3];
+const nodes=[];layers.forEach((n,l)=>{for(let i=0;i<n;i++){nodes.push({l,i,x:LX[l]*1.0,y:(i-(n-1)/2)*(l==1?0.95:1.4),z:(l==1?(i%2?0.5:-0.5):0)})}});
+const nodeAt=(l,i)=>nodes.find(n=>n.l==l&&n.i==i);
+// ---------- helpers ----------
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const seg=(t,a,b)=>clamp((t-a)/(b-a));
+let cam;
+function proj(p){
+  const c=Math.cos(cam.yaw),s=Math.sin(cam.yaw);
+  let x=p.x*c-p.z*s,z=p.x*s+p.z*c,y=p.y;
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let y2=y*cp-z*sp,z2=y*sp+z*cp;
+  const d=cam.dist+z2,f=cam.f/d;
+  return{x:W/2+x*f+cam.ox,y:H*0.46-y2*f,s:f,z:d};
+}
+function glow(x,y,r,col,a){
+  const gr=g.createRadialGradient(x,y,0,x,y,r);
+  gr.addColorStop(0,`rgba(${col},${a})`);gr.addColorStop(.4,`rgba(${col},${a*.35})`);gr.addColorStop(1,`rgba(${col},0)`);
+  g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,6.283);g.fill();
+}
+function text(s,x,y,size,col='#fff',a=1,weight=900){
+  g.globalAlpha=a;g.font=`${weight} ${size}px Impact, 'Arial Black', sans-serif`;g.textAlign='center';const mw=g.measureText(s).width;if(mw>960){size=size*960/mw;g.font=`${weight} ${size}px Impact, 'Arial Black', sans-serif`;}
+  g.lineJoin='round';g.lineWidth=size*.16;g.strokeStyle='#000';g.strokeText(s,x,y);g.fillStyle=col;g.fillText(s,x,y);g.globalAlpha=1;
+}
+function caption(lines,t0,t1,t,col){
+  const a=Math.min(seg(t,t0,t0+.35),1-seg(t,t1-.3,t1));if(a<=0)return;
+  const pop=1+0.12*(1-ease(seg(t,t0,t0+.4)));
+  g.save();g.translate(W/2,250);g.scale(pop,pop);
+  lines.forEach((l,i)=>text(l,0,i*120,i==0?112:92,i==0?'#fff':col,a));
+  g.restore();
+}
+// ---------- render ----------
+function render(frame){
+  const t=frame/FPS;
+  // background
+  const bg=g.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#0b0620');bg.addColorStop(1,'#020a14');
+  g.globalCompositeOperation='source-over';g.fillStyle=bg;g.fillRect(0,0,W,H);
+  // starfield / floor grid in 3D
+  cam={yaw:-0.6+0.5*Math.sin(t*0.35)+t*0.04,pitch:0.28+0.1*Math.sin(t*.5),dist:13.5-1.0*ease(seg(t,0,3))+0.6*seg(t,23,27),f:1500,ox:0};
+  g.globalCompositeOperation='lighter';
+  g.lineWidth=2;
+  for(let i=-8;i<=8;i++){
+    for(const[a,b]of[[{x:i,y:-2.6,z:-8},{x:i,y:-2.6,z:8}],[{x:-8,y:-2.6,z:i},{x:8,y:-2.6,z:i}]]){
+      const p=proj(a),q=proj(b);g.strokeStyle=`rgba(90,60,255,${0.16*clamp(1-Math.abs(i)/9)})`;
+      g.beginPath();g.moveTo(p.x,p.y);g.lineTo(q.x,q.y);g.stroke();
+    }
+  }
+  // training step mapping
+  const trainP=ease(seg(t,17,23));
+  const si=t<17?0:Math.floor(trainP*(snaps.length-1));
+  const sn=snaps[t<17?0:si];
+  // phase info
+  const fwdT=(t-7)%2.2/2.2;  // forward pulse loop 7..12
+  const inFwd=t>=3&&t<12.5, inBack=t>=12.5&&t<17;
+  // activations
+  const sampleIdx=Math.floor(t*1.5)%8;
+  let act;
+  if(t>=23){act=fwd(X[Math.floor((t-23)*1.2)%8])}else{
+    // temp swap weights to snapshot
+    const sv=[W1,W2,b1,b2];W1=sn.W1;W2=sn.W2;b1=sn.b1;b2=sn.b2;act=fwd(X[sampleIdx]);[W1,W2,b1,b2]=sv}
+  const finalSn=snaps[snaps.length-1];
+  const useW=t<17?snaps[0]:(t>=23?finalSn:sn);
+  // edges
+  const edges=[];
+  for(let j=0;j<NH;j++)for(let i=0;i<NI;i++)edges.push({a:nodeAt(0,i),b:nodeAt(1,j),w:useW.W1[j][i],l:0});
+  for(let k=0;k<NO;k++)for(let j=0;j<NH;j++)edges.push({a:nodeAt(1,j),b:nodeAt(2,k),w:useW.W2[k][j],l:1});
+  const wob=(t>=17&&t<23)?0.18*Math.sin(t*40):0;
+  edges.forEach(e=>{
+    const p=proj(e.a),q=proj(e.b);const m=Math.min(1,Math.abs(e.w)/3);
+    const col=e.w>0?'60,200,255':'255,80,160';
+    g.strokeStyle=`rgba(${col},${0.12+0.5*m})`;g.lineWidth=1.5+5*m*(1+wob);
+    g.beginPath();g.moveTo(p.x,p.y);g.lineTo(q.x,q.y);g.stroke();
+    // pulse
+    let ph=-1,pc='255,255,255';
+    if(t>=3&&t<12.5){const s=(t*0.9)%1;const lt=e.l==0?seg(s,0,.5):seg(s,.5,1);ph=lt>0&&lt<1?lt:-1;pc='120,255,200'}
+    if(inBack){const s=(t*0.9)%1;const lt=e.l==1?seg(s,0,.5):seg(s,.5,1);ph=lt>0&&lt<1?1-lt:-1;pc='255,70,70'}
+    if(ph>=0){const x=p.x+(q.x-p.x)*ph,y=p.y+(q.y-p.y)*ph;glow(x,y,38*p.s/150+10,pc,.9)}
+  });
+  // nodes sorted
+  const ns=nodes.map(n=>({n,p:proj(n)})).sort((a,b)=>b.p.z-a.p.z);
+  ns.forEach(({n,p})=>{
+    let v=n.l==0?X[sampleIdx][n.i]:(n.l==1?act.h[n.i]:act.o[0]);
+    if(t<3)v=0.5+0.5*Math.sin(t*3+n.i+n.l);
+    const col=n.l==0?'255,210,80':(n.l==1?'170,110,255':'80,255,170');
+    const r=(34+14*v)*p.s/150;
+    glow(p.x,p.y,r*3.2,col,.25+.55*v);
+    g.globalCompositeOperation='source-over';
+    const gr=g.createRadialGradient(p.x-r*.3,p.y-r*.3,r*.1,p.x,p.y,r);
+    gr.addColorStop(0,'#fff');gr.addColorStop(.5,`rgb(${col})`);gr.addColorStop(1,'#101030');
+    g.fillStyle=gr;g.beginPath();g.arc(p.x,p.y,r,0,6.283);g.fill();
+    g.globalCompositeOperation='lighter';
+  });
+  g.globalCompositeOperation='source-over';
+  // layer labels
+  [['INPUT',0],['HIDDEN',1],['OUTPUT',2]].forEach(([s,l])=>{
+    const p=proj({x:LX[l],y:-2.1,z:0});text(s,p.x,p.y,40,'#9aa4ff',.85,800)});
+  // loss chart (3D-ish panel at bottom)
+  const px=90,py=1380,pw=900,ph2=330;
+  const pa=seg(t,13,14);
+  if(pa>0){
+    g.globalAlpha=pa;g.fillStyle='rgba(10,10,40,.7)';g.strokeStyle='rgba(120,100,255,.8)';g.lineWidth=3;
+    g.beginPath();g.roundRect(px,py,pw,ph2,28);g.fill();g.stroke();
+    text('LOSS (error)',px+pw/2,py+62,44,'#ff6b9a');
+    const upto=t<17?0:Math.floor(trainP*6000);
+    g.strokeStyle='#ff4d8d';g.lineWidth=7;g.beginPath();
+    const cutoff=t<17?1:Math.max(2,upto);
+    for(let k=0;k<=Math.min(cutoff,6000);k+=20){const x=px+40+(pw-80)*k/6000,y=py+ph2-40-(ph2-130)*Math.min(1,losses[k]/0.3);k?g.lineTo(x,y):g.moveTo(x,y)}
+    g.stroke();
+    const L=t<17?losses[0]:losses[Math.min(upto,6000)];
+    text('error: '+L.toFixed(4),px+pw/2,py+ph2-10,36,'#fff');
+    g.globalAlpha=1;
+  }
+  // prediction badge at end
+  if(t>=23){
+    const a=seg(t,23,23.6);const i=Math.floor((t-23)*1.2)%8;
+    const out=act.o[0];
+    g.globalAlpha=a;
+    text(`input ${X[i].join('')}  →  ${out>0.5?1:0}`,W/2,1230,86,'#6bffb0');
+    text(`(correct answer: ${Y[i][0]})`,W/2,1305,58,'#fff');
+    g.globalAlpha=1;
+  }
+  // captions
+  caption(['THIS IS HOW','AI LEARNS 🧠'],0,3,t,'#ffd54a');
+  caption(['1. DATA GOES IN','👇 numbers light up neurons'],3,7,t,'#ffd54a');
+  caption(['2. MULTIPLY. ADD. PASS IT ON','Neurons vote → answer'],7,12.5,t,'#7affc8');
+  caption(['3. WRONG? 😡','BLAME FLOWS BACKWARD'],12.5,17,t,'#ff6b6b');
+  caption(['4. TWEAK THE WEIGHTS','REPEAT 6000 TIMES'],17,23,t,'#c9a0ff');
+  caption(['NOW IT\'S SMART ✅','Follow for more AI'],23,27.1,t,'#6bffb0');
+  // progress bar
+  g.fillStyle='rgba(255,255,255,.15)';g.fillRect(60,1850,960,12);
+  g.fillStyle='#8a6bff';g.fillRect(60,1850,960*t/DUR,12);
+}
+window.render=render;window.FPS=FPS;window.DUR=DUR;
+</script></body></html>
